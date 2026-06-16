@@ -146,6 +146,8 @@
     flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
     padding: 6px; cursor: pointer; border-radius: var(--radius-sm);
     transition: background 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
   .nav-item.active { background: rgba(108,99,255,0.12); }
   .nav-item svg { width: 22px; height: 22px; }
@@ -162,9 +164,11 @@
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 8px 24px rgba(108,99,255,0.4);
     z-index: 101; transition: transform 0.2s, box-shadow 0.2s;
+    -webkit-appearance: none;
+    touch-action: manipulation;
   }
   .fab:active { transform: scale(0.94); }
-  .fab svg { width: 26px; height: 26px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; }
+  .fab svg { width: 26px; height: 26px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; pointer-events: none; }
 
   /* PAGES */
   .page { display: none; padding-bottom: 100px; }
@@ -175,6 +179,7 @@
     position: fixed; inset: 0; background: rgba(0,0,0,0.7);
     z-index: 200; display: none; align-items: flex-end;
     backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
   .modal-overlay.open { display: flex; }
   .modal {
@@ -505,7 +510,7 @@
 </nav>
 
 <!-- FAB -->
-<button class="fab" onclick="openModal()">
+<button class="fab" onclick="openModal()" ontouchstart="openModal()">
   <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
 
@@ -633,9 +638,13 @@ function showPage(name, el) {
   render();
 }
 
+let modalOpen = false;
 function openModal() {
+  if (modalOpen) return;
+  modalOpen = true;
   document.getElementById('modalOverlay').classList.add('open');
   setType('income', document.querySelector('.type-tab.income'));
+  setTimeout(() => { modalOpen = false; }, 500);
 }
 
 function closeModal() {
