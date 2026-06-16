@@ -306,6 +306,33 @@
   }
   .month-btn.active { background: rgba(108,99,255,0.2); border-color: var(--accent); color: var(--accent); font-weight: 700; }
 
+  /* EDIT/DELETE ACTION SHEET */
+  .action-sheet-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 300; display: none; align-items: flex-end;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  }
+  .action-sheet-overlay.open { display: flex; }
+  .action-sheet {
+    background: var(--surface); border-radius: 24px 24px 0 0;
+    padding: 20px 20px 40px; width: 100%; max-width: 430px; margin: 0 auto;
+    animation: slideUp 0.3s ease;
+  }
+  .action-sheet-title { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 16px; }
+  .action-btn {
+    width: 100%; padding: 16px; border: none; border-radius: var(--radius);
+    font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 10px;
+    font-family: 'Inter', sans-serif; touch-action: manipulation;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .action-btn-edit { background: rgba(108,99,255,0.15); color: var(--accent); }
+  .action-btn-delete { background: rgba(255,77,106,0.15); color: var(--expense); }
+  .action-btn-cancel { background: var(--card); color: var(--muted); }
+
+  /* SWIPE HINT ON TX ITEMS */
+  .tx-item { cursor: pointer; border-radius: var(--radius-sm); transition: background 0.15s; }
+  .tx-item:active { background: rgba(255,255,255,0.04); }
+
   .salary-banner {
     background: linear-gradient(135deg, rgba(108,99,255,0.2), rgba(0,212,170,0.1));
     border: 1px solid rgba(108,99,255,0.3); border-radius: var(--radius);
@@ -514,6 +541,17 @@
   <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
 
+<!-- ACTION SHEET -->
+<div class="action-sheet-overlay" id="actionSheetOverlay" onclick="closeActionSheet(event)">
+  <div class="action-sheet">
+    <div class="modal-handle"></div>
+    <div class="action-sheet-title" id="actionSheetTitle">Movimiento</div>
+    <button class="action-btn action-btn-edit" onclick="editItem()">✏️ Editar</button>
+    <button class="action-btn action-btn-delete" onclick="confirmDelete()">🗑️ Eliminar</button>
+    <button class="action-btn action-btn-cancel" onclick="closeActionSheet()">Cancelar</button>
+  </div>
+</div>
+
 <!-- MONTH PICKER MODAL -->
 <div class="month-modal-overlay" id="monthModalOverlay" onclick="closeMonthOutside(event)">
   <div class="month-modal">
@@ -647,11 +685,17 @@ function openModal() {
   setTimeout(() => { modalOpen = false; }, 500);
 }
 
+function resetSaveBtn() {
+  const btn = document.querySelector('.btn-primary');
+  if (btn) { btn.textContent = 'Guardar'; btn.onclick = addTransaction; }
+}
+
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
   document.getElementById('txDesc').value = '';
   document.getElementById('txAmount').value = '';
   document.getElementById('txPerson').value = '';
+  resetSaveBtn();
 }
 
 function closeModalOutside(e) {
@@ -746,17 +790,132 @@ function addTransaction() {
   showToast('✅ Movimiento guardado');
 }
 
-function deleteDebt(id) {
-  debts = debts.filter(d => d.id !== id);
-  save(); render();
-  showToast('🗑️ Eliminado');
+// ACTION SHEET & EDIT
+let activeItemType = null;
+let activeItemId = null;
+
+function openActionSheet(type, id) {
+  activeItemType = type;
+  activeItemId = id;
+  let label = '';
+  if (type === 'tx') {
+    const t = transactions.find(t => t.id === id);
+    label = t ? `${t.desc} · ${fmt(t.amount)}` : '';
+  } else if (type === 'debt') {
+    const d = debts.find(d => d.id === id);
+    label = d ? `${d.person} · ${fmt(d.amount)}` : '';
+  } else if (type === 'invest') {
+    const i = investments.find(i => i.id === id);
+    label = i ? `${i.desc} · ${fmt(i.amount)}` : '';
+  }
+  document.getElementById('actionSheetTitle').textContent = label;
+  document.getElementById('actionSheetOverlay').classList.add('open');
 }
 
-function deleteInvestment(id) {
-  investments = investments.filter(i => i.id !== id);
-  save(); render();
-  showToast('🗑️ Eliminado');
+function closeActionSheet(e) {
+  if (!e || e.target === document.getElementById('actionSheetOverlay')) {
+    document.getElementById('actionSheetOverlay').classList.remove('open');
+  }
 }
+
+function confirmDelete() {
+  document.getElementById('actionSheetOverlay').classList.remove('open');
+  if (activeItemType === 'tx') {
+    transactions = transactions.filter(t => t.id !== activeItemId);
+    showToast('🗑️ Movimiento eliminado');
+  } else if (activeItemType === 'debt') {
+    debts = debts.filter(d => d.id !== activeItemId);
+    showToast('🗑️ Eliminado');
+  } else if (activeItemType === 'invest') {
+    investments = investments.filter(i => i.id !== activeItemId);
+    showToast('🗑️ Inversión eliminada');
+  }
+  save(); render();
+}
+
+function editItem() {
+  document.getElementById('actionSheetOverlay').classList.remove('open');
+  if (activeItemType === 'tx') {
+    const t = transactions.find(t => t.id === activeItemId);
+    if (!t) return;
+    // Open modal pre-filled
+    const tabEl = document.querySelector(`.type-tab.${t.type}`);
+    document.getElementById('modalOverlay').classList.add('open');
+    setType(t.type, tabEl);
+    document.getElementById('txDesc').value = t.desc;
+    document.getElementById('txAmount').value = t.amount;
+    document.getElementById('txDate').value = t.date;
+    document.getElementById('txCategory').value = t.category;
+    // Change save button to update
+    document.querySelector('.btn-primary').textContent = 'Actualizar';
+    document.querySelector('.btn-primary').onclick = () => updateTransaction(activeItemId);
+  } else if (activeItemType === 'debt') {
+    const d = debts.find(d => d.id === activeItemId);
+    if (!d) return;
+    const tabEl = document.querySelector(`.type-tab.${d.kind}`);
+    document.getElementById('modalOverlay').classList.add('open');
+    setType(d.kind, tabEl);
+    document.getElementById('txDesc').value = d.desc;
+    document.getElementById('txAmount').value = d.amount;
+    document.getElementById('txDate').value = d.date;
+    document.getElementById('txPerson').value = d.person;
+    document.querySelector('.btn-primary').textContent = 'Actualizar';
+    document.querySelector('.btn-primary').onclick = () => updateDebt(activeItemId);
+  } else if (activeItemType === 'invest') {
+    const i = investments.find(i => i.id === activeItemId);
+    if (!i) return;
+    const tabEl = document.querySelector('.type-tab.invest');
+    document.getElementById('modalOverlay').classList.add('open');
+    setType('invest', tabEl);
+    document.getElementById('txDesc').value = i.desc;
+    document.getElementById('txAmount').value = i.amount;
+    document.getElementById('txDate').value = i.date;
+    document.getElementById('txInvestType').value = i.type;
+    document.querySelector('.btn-primary').textContent = 'Actualizar';
+    document.querySelector('.btn-primary').onclick = () => updateInvestment(activeItemId);
+  }
+}
+
+function updateTransaction(id) {
+  const desc = document.getElementById('txDesc').value.trim();
+  const amount = parseFloat(document.getElementById('txAmount').value);
+  const date = document.getElementById('txDate').value;
+  const category = document.getElementById('txCategory').value;
+  if (!desc || !amount || !date) { showToast('⚠️ Completa todos los campos'); return; }
+  const d = new Date(date + 'T00:00:00');
+  const idx = transactions.findIndex(t => t.id === id);
+  if (idx !== -1) {
+    transactions[idx] = { ...transactions[idx], desc, amount, category, date, month: d.getMonth(), year: d.getFullYear() };
+  }
+  save(); closeModal(); resetSaveBtn(); render();
+  showToast('✅ Movimiento actualizado');
+}
+
+function updateDebt(id) {
+  const desc = document.getElementById('txDesc').value.trim();
+  const amount = parseFloat(document.getElementById('txAmount').value);
+  const date = document.getElementById('txDate').value;
+  const person = document.getElementById('txPerson').value.trim();
+  if (!desc || !amount || !date || !person) { showToast('⚠️ Completa todos los campos'); return; }
+  const idx = debts.findIndex(d => d.id === id);
+  if (idx !== -1) debts[idx] = { ...debts[idx], desc, amount, date, person };
+  save(); closeModal(); resetSaveBtn(); render();
+  showToast('✅ Actualizado');
+}
+
+function updateInvestment(id) {
+  const desc = document.getElementById('txDesc').value.trim();
+  const amount = parseFloat(document.getElementById('txAmount').value);
+  const date = document.getElementById('txDate').value;
+  const type = document.getElementById('txInvestType').value;
+  if (!desc || !amount || !date) { showToast('⚠️ Completa todos los campos'); return; }
+  const idx = investments.findIndex(i => i.id === id);
+  if (idx !== -1) investments[idx] = { ...investments[idx], desc, amount, date, type };
+  save(); closeModal(); resetSaveBtn(); render();
+  showToast('✅ Inversión actualizada');
+}
+
+
 
 function render() {
   const monthTx = transactions.filter(t => t.month === currentMonth && t.year === currentYear);
@@ -836,7 +995,7 @@ function txHTML(t) {
   const d = new Date(t.date + 'T00:00:00');
   const dateStr = d.toLocaleDateString('es-MX', {day:'numeric', month:'short'});
   const emoji = t.category ? t.category.split(' ')[0] : '💳';
-  return `<div class="tx-item">
+  return `<div class="tx-item" onclick="openActionSheet('tx',${t.id})" ontouchstart="">
     <div class="tx-icon" style="background:${isIncome?'rgba(0,212,170,0.12)':'rgba(255,77,106,0.12)'}">${emoji}</div>
     <div class="tx-info">
       <div class="tx-name">${t.desc}</div>
@@ -852,7 +1011,7 @@ function txHTML(t) {
 function debtHTML(d, kind) {
   const isOwe = kind === 'owe';
   const dateStr = new Date(d.date + 'T00:00:00').toLocaleDateString('es-MX', {day:'numeric',month:'short',year:'numeric'});
-  return `<div class="debt-card">
+  return `<div class="debt-card" onclick="openActionSheet('debt',${d.id})" ontouchstart="" style="cursor:pointer">
     <div class="debt-header">
       <div>
         <div class="debt-name">${d.person}</div>
@@ -861,7 +1020,7 @@ function debtHTML(d, kind) {
       </div>
       <div style="text-align:right">
         <div class="debt-amount-big ${isOwe?'neg':'pos'}">${fmt(d.amount)}</div>
-        <button class="delete-btn" onclick="deleteDebt(${d.id})">✕ Saldar</button>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Toca para editar</div>
       </div>
     </div>
   </div>`;
@@ -870,7 +1029,7 @@ function debtHTML(d, kind) {
 function investHTML(i) {
   const emoji = i.type ? i.type.split(' ')[0] : '📈';
   const dateStr = new Date(i.date + 'T00:00:00').toLocaleDateString('es-MX', {day:'numeric',month:'short',year:'numeric'});
-  return `<div class="invest-card">
+  return `<div class="invest-card" onclick="openActionSheet('invest',${i.id})" ontouchstart="" style="cursor:pointer">
     <div class="invest-icon">${emoji}</div>
     <div class="invest-info">
       <div class="invest-name">${i.desc}</div>
@@ -879,7 +1038,7 @@ function investHTML(i) {
     <div class="invest-val">
       <div class="invest-amount">${fmt(i.amount)}</div>
       <div class="invest-date">${dateStr}</div>
-      <button class="delete-btn" style="margin-top:6px" onclick="deleteInvestment(${i.id})">✕</button>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Toca para editar</div>
     </div>
   </div>`;
 }
